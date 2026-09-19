@@ -122,7 +122,7 @@ export function PdfViewer({ documentId, event }: Props) {
     return (
       <div className="flex h-full flex-col gap-2 overflow-auto rounded-lg border border-slate-200 bg-slate-100 p-2 dark:border-slate-800 dark:bg-slate-950">
         <img
-          src={`/data/snippets/${event.id}.jpg`}
+          src={`${import.meta.env.BASE_URL}data/snippets/${event.id}.jpg`}
           alt={`${event.raw_date_text ?? ""} ${event.raw_time ?? ""} ${event.raw_event_type ?? ""}`}
           className="w-full rounded-md shadow"
         />

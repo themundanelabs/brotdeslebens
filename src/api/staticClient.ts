@@ -30,8 +30,8 @@ let cachedEvents: Promise<PublicEventRow[]> | null = null;
 
 function loadEvents(): Promise<PublicEventRow[]> {
   if (!cachedEvents) {
-    cachedEvents = fetch("/data/events.json").then((res) => {
-      if (!res.ok) throw new ApiError(res.status, "Could not load /data/events.json");
+    cachedEvents = fetch(`${import.meta.env.BASE_URL}data/events.json`).then((res) => {
+      if (!res.ok) throw new ApiError(res.status, "Could not load data/events.json");
       return res.json() as Promise<PublicEventRow[]>;
     });
   }

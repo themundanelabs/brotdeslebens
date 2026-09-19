@@ -8,4 +8,8 @@ export default defineConfig(({ mode }) => ({
   // its own directory so it never collides with the default admin
   // build's `dist/` — the default build's outDir is untouched.
   build: mode === 'public' ? { outDir: 'dist-public' } : undefined,
+  // GitHub Pages project site serves from /brotdeslebens/, not the
+  // domain root — asset URLs need that prefix baked in. The default
+  // (admin) build stays at base '/' since it's not deployed there.
+  base: mode === 'public' ? '/brotdeslebens/' : '/',
 }))

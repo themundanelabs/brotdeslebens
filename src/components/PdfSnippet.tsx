@@ -176,7 +176,7 @@ export function PdfSnippet({ documentId, event }: Props) {
           ref={containerRef}
           className="overflow-hidden rounded-lg border border-slate-200 bg-slate-100 dark:border-slate-800 dark:bg-slate-950"
         >
-          <img src={`/data/snippets/${event.id}.jpg`} alt="" className="block w-full" />
+          <img src={`${import.meta.env.BASE_URL}data/snippets/${event.id}.jpg`} alt="" className="block w-full" />
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400">
           {event.raw_date_text} · {event.raw_time} · {event.raw_event_type}
