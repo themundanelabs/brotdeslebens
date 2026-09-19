@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dist-public/
+.env
+!.env.example
+*.local
+vite.log
