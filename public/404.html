@@ -5,12 +5,14 @@
     <title>Kirchenblatt Agenda</title>
     <script type="text/javascript">
       // GitHub Pages has no server-side rewrite for client-side routes, so
-      // a direct link or refresh at e.g. /brotdeslebens/map 404s here.
-      // Standard workaround (https://github.com/rafgraph/spa-github-pages):
-      // encode the real path into a query string and redirect to the app
-      // root, where index.html's matching script restores it via
-      // history.replaceState before React Router mounts.
-      var pathSegmentsToKeep = 1;
+      // a direct link or refresh at e.g. /map 404s here. Standard
+      // workaround (https://github.com/rafgraph/spa-github-pages): encode
+      // the real path into a query string and redirect to the app root,
+      // where index.html's matching script restores it via
+      // history.replaceState before React Router mounts. 0 segments to
+      // keep since the site is served from the custom domain's root
+      // (www.brotdeslebens.ch), not a /brotdeslebens/ subpath.
+      var pathSegmentsToKeep = 0;
       var l = window.location;
       l.replace(
         l.protocol + "//" + l.hostname + (l.port ? ":" + l.port : "") +
