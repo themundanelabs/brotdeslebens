@@ -50,6 +50,9 @@ function matches(e: PublicEventRow, filters: EventFilters, exclude: Set<string> 
   if (filters.document_id != null && !exclude.has("document_id") && e.document_id !== filters.document_id) {
     return false;
   }
+  if (filters.document_region && !exclude.has("document_region") && e.document_region !== filters.document_region) {
+    return false;
+  }
   if (filters.region && !exclude.has("region") && e.region !== filters.region) return false;
   if (filters.parish && !exclude.has("parish") && e.parish !== filters.parish) return false;
   const date = effectiveDate(filters);
@@ -115,6 +118,9 @@ export const staticApi: Api = {
 
     const meta: Meta = {
       documents,
+      cantons: distinct(
+        events.filter((e) => matches(e, filters, new Set(["document_region"]))).map((e) => e.document_region)
+      ),
       regions: distinct(events.filter((e) => matches(e, filters, new Set(["region"]))).map((e) => e.region)),
       parishes: distinct(events.filter((e) => matches(e, filters, new Set(["parish"]))).map((e) => e.parish)),
       dates: distinct(events.filter((e) => matches(e, filters, new Set(["date"]))).map((e) => e.iso_date)),

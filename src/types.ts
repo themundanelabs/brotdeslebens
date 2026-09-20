@@ -56,6 +56,10 @@ export interface Meta {
   parishes: string[];
   dates: string[];
   categories: string[];
+  /** Public site only — distinct Document.region values ("Canton"
+   * filter). Optional since the live backend's /api/meta doesn't return
+   * it; the admin UI never reads this field. */
+  cantons?: string[];
 }
 
 export interface Mapping {
@@ -105,6 +109,10 @@ export interface EventFilters {
   category?: string;
   search?: string;
   today?: boolean;
+  /** Public site only ("Canton" filter, per explicit mapping to
+   * Document.region) — filters by document_region directly rather than
+   * a single document_id. Never set by the admin UI. */
+  document_region?: string;
 }
 
 export interface LineOut {
