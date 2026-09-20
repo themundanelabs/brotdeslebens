@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import "../theme.css";
-import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import { api } from "../../api/client";
 import { usePoll } from "../../hooks/usePoll";
 import type { Event, EventFilters, MapLocation } from "../../types";
@@ -12,17 +14,59 @@ import { EventDetail } from "../components/EventDetail";
 import { Icon, HostGlyph } from "../icons";
 import { formatTimeCompact } from "../dates";
 
-const SOLOTHURN_CENTER = { lat: 47.29, lng: 7.7 };
-const MAP_LIBRARIES: "places"[] = ["places"];
+// Same rationale as the admin MapPage's CHURCH_ICON — an inline SVG
+// rather than Leaflet's default marker image, since Vite doesn't
+// reliably resolve Leaflet's bundled marker PNG paths. Tinted to the
+// mockup's wine colour instead of admin's orange for visual consistency
+// with the rest of the public site.
+const CHURCH_ICON = L.divIcon({
+  className: "",
+  html: `<svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg">
+    <path d="M15 0C6.716 0 0 6.716 0 15c0 10.5 15 25 15 25s15-14.5 15-25C30 6.716 23.284 0 15 0z" fill="#6E2430"/>
+    <g fill="white">
+      <rect x="14" y="5" width="2" height="5"/>
+      <rect x="12.3" y="7" width="5.4" height="1.6"/>
+      <polygon points="15,9.5 8,15.5 22,15.5"/>
+      <rect x="9" y="15.5" width="12" height="8.5"/>
+      <rect x="13" y="19.5" width="4" height="4.5" fill="#6E2430"/>
+    </g>
+  </svg>`,
+  iconSize: [30, 40],
+  iconAnchor: [15, 40],
+  popupAnchor: [0, -36],
+});
 
-function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+const YOU_ICON = L.divIcon({
+  className: "",
+  html: '<div style="width:16px;height:16px;border-radius:50%;background:#0ea5e9;border:2px solid white;box-shadow:0 0 0 2px #0ea5e9;"></div>',
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+});
+
+const SOLOTHURN_CENTER: [number, number] = [47.29, 7.7];
+
+function haversineKm(a: [number, number], b: [number, number]): number {
   const R = 6371;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLon = ((b.lng - a.lng) * Math.PI) / 180;
-  const lat1 = (a.lat * Math.PI) / 180;
-  const lat2 = (b.lat * Math.PI) / 180;
+  const dLat = ((b[0] - a[0]) * Math.PI) / 180;
+  const dLon = ((b[1] - a[1]) * Math.PI) / 180;
+  const lat1 = (a[0] * Math.PI) / 180;
+  const lat2 = (b[0] * Math.PI) / 180;
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function FitBounds({ points }: { points: [number, number][] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (points.length === 0) return;
+    if (points.length === 1) {
+      map.setView(points[0], 12);
+    } else {
+      map.fitBounds(points, { padding: [32, 32] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(points)]);
+  return null;
 }
 
 function nextByParish(events: Event[]): Record<string, Event> {
@@ -38,17 +82,11 @@ function nextByParish(events: Event[]): Record<string, Event> {
 }
 
 export function PublicMapPage() {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: apiKey ?? "",
-    libraries: MAP_LIBRARIES,
-  });
-
   const [filters, setFilters] = useState<EventFilters>({});
   const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
 
   const [address, setAddress] = useState("");
-  const [addressCoords, setAddressCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [addressCoords, setAddressCoords] = useState<[number, number] | null>(null);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -74,12 +112,20 @@ export function PublicMapPage() {
   const sorted: (MapLocation & { distanceKm: number | null })[] = useMemo(() => {
     const withDistance = locations.map((loc) => ({
       ...loc,
-      distanceKm: addressCoords ? haversineKm(addressCoords, { lat: loc.lat, lng: loc.lon }) : null,
+      distanceKm: addressCoords ? haversineKm(addressCoords, [loc.lat, loc.lon]) : null,
     }));
     if (addressCoords) withDistance.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
     else withDistance.sort((a, b) => a.place.localeCompare(b.place));
     return withDistance;
   }, [locations, addressCoords]);
+
+  const points: [number, number][] = useMemo(
+    () =>
+      addressCoords
+        ? [addressCoords, ...locations.map((l): [number, number] => [l.lat, l.lon])]
+        : locations.map((l): [number, number] => [l.lat, l.lon]),
+    [locations, addressCoords]
+  );
 
   const findNearest = async () => {
     const q = address.trim();
@@ -88,7 +134,7 @@ export function PublicMapPage() {
     setLocateError(null);
     try {
       const { lat, lon } = await api.geocodeAddress(q);
-      setAddressCoords({ lat, lng: lon });
+      setAddressCoords([lat, lon]);
     } catch {
       setLocateError("Adresse nicht gefunden. Bitte Strasse und Ort angeben.");
       setAddressCoords(null);
@@ -180,43 +226,37 @@ export function PublicMapPage() {
             )}
 
             <div className="map-card" style={{ marginTop: "1rem" }}>
-              {!apiKey ? (
-                <p style={{ padding: "1.5rem" }}>
-                  Karte noch nicht verfügbar — Google Maps API-Schlüssel fehlt.
-                </p>
-              ) : loadError ? (
-                <p style={{ padding: "1.5rem" }}>Karte konnte nicht geladen werden.</p>
-              ) : !isLoaded ? (
-                <p style={{ padding: "1.5rem" }}>Karte wird geladen…</p>
-              ) : (
-                <GoogleMap
-                  mapContainerStyle={{ width: "100%", height: "360px" }}
-                  center={addressCoords ?? SOLOTHURN_CENTER}
-                  zoom={addressCoords ? 12 : 10}
-                >
-                  {addressCoords && (
-                    <Marker
-                      position={addressCoords}
-                      icon={{
-                        path: window.google.maps.SymbolPath.CIRCLE,
-                        scale: 8,
-                        fillColor: "#0ea5e9",
-                        fillOpacity: 1,
-                        strokeColor: "#fff",
-                        strokeWeight: 2,
-                      }}
-                    />
-                  )}
-                  {locations.map((loc) => (
-                    <Marker
-                      key={loc.place}
-                      position={{ lat: loc.lat, lng: loc.lon }}
-                      title={loc.place}
-                      onClick={() => loc.events[0] && setSelectedId(loc.events[0].id)}
-                    />
-                  ))}
-                </GoogleMap>
-              )}
+              <MapContainer center={SOLOTHURN_CENTER} zoom={10} style={{ width: "100%", height: "360px" }}>
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <FitBounds points={points} />
+                {addressCoords && (
+                  <Marker position={addressCoords} icon={YOU_ICON}>
+                    <Popup>Sie sind hier</Popup>
+                  </Marker>
+                )}
+                {locations.map((loc) => (
+                  <Marker key={loc.place} position={[loc.lat, loc.lon]} icon={CHURCH_ICON}>
+                    <Popup>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px", fontSize: "12px" }}>
+                        <strong>{loc.place}</strong>
+                        {loc.events.map((e) => (
+                          <button
+                            key={e.id}
+                            type="button"
+                            onClick={() => setSelectedId(e.id)}
+                            style={{ textAlign: "left", background: "none", border: 0, padding: "2px 0", cursor: "pointer" }}
+                          >
+                            {e.raw_date_text} {e.raw_time && `· ${e.raw_time}`} · {e.raw_event_type}
+                          </button>
+                        ))}
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+              </MapContainer>
             </div>
 
             <ul className="map-list">
