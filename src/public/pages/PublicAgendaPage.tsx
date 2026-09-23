@@ -249,7 +249,7 @@ export function PublicAgendaPage() {
                 className={`chip ${!filters.parish ? "on" : "off"}`}
                 onClick={() => setFilters((f) => ({ ...f, parish: undefined }))}
               >
-                Alle Gemeinden
+                Alle Standorte
               </button>
               {meta?.parishes.map((p) => (
                 <button
@@ -286,8 +286,10 @@ export function PublicAgendaPage() {
             <aside className="note">
               <Icon name="info" size={16} />
               <p>
-                Die Filter helfen beim Finden. Prüfen Sie die Angaben in der ausführlichen Beschreibung — im
-                ursprünglichen Kirchenblatt als PDF-Ausschnitt hinterlegt. Termine können sich kurzfristig ändern.
+                Diese Website nutzt KI, um Veranstaltungen zu finden, wobei gelegentlich Fehler auftreten können.
+                Zur Sicherheit zeigen wir bei jedem Termin einen Ausschnitt des originalen Newsletters – bitte
+                prüfen Sie diesen immer auf Zeit und Ort. Wir freuen uns über Ihr Feedback, übernehmen jedoch
+                keine Haftung für fehlerhafte Angaben oder unangekündigte Änderungen des Herausgebers.
               </p>
             </aside>
 

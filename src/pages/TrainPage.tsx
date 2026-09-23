@@ -45,6 +45,7 @@ export function TrainPage() {
   const [training, setTraining] = useState(false);
   const [applying, setApplying] = useState(false);
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null);
+  const [linkStatus, setLinkStatus] = useState<"idle" | "saving" | "reextracting" | "done" | "error">("idle");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [addingCategory, setAddingCategory] = useState(false);
   // Event-type mode's selection persists across page navigation — "select
@@ -53,6 +54,7 @@ export function TrainPage() {
   // across re-extractions but the bbox identity is what the user is
   // actually pointing at.
   const [selectedEvents, setSelectedEvents] = useState<Map<string, Event>>(new Map());
+  const [blocklisting, setBlocklisting] = useState<string | null>(null);
 
   const { data: documents } = usePoll(() => api.listDocuments(), []);
   const doc = documents?.find((d) => d.id === documentId) ?? null;
@@ -62,6 +64,11 @@ export function TrainPage() {
     () => api.listEvents({ document_id: documentId }),
     [documentId]
   );
+  // Global, text-only "never a parish header" overrides (Trainer UI's own
+  // blocklist section below) — separate from the per-occurrence gold
+  // labels lines cycle through on click, which only train the model
+  // rather than guaranteeing an exclusion.
+  const { data: ignoredHeaders, refetch: refetchIgnoredHeaders } = usePoll(() => api.listIgnoredHeaders(), []);
 
   const categoryByType = new Map((mappings ?? []).map((m) => [m.raw_event_type, m.category]));
 
@@ -168,20 +175,62 @@ export function TrainPage() {
       });
     } else if (mode === "links" && selectedEventKey) {
       const [ep, ex0, ey0, ex1, ey1] = selectedEventKey.split("|").map(Number);
-      await api.setEventParishLink(documentId, {
-        event_page: ep,
-        event_x0: ex0,
-        event_y0: ey0,
-        event_x1: ex1,
-        event_y1: ey1,
-        header_page: line.page,
-        header_x0: line.x0,
-        header_y0: line.y0,
-        header_x1: line.x1,
-        header_y1: line.y1,
-      });
       setSelectedEventKey(null);
-      refetchEvents();
+      setLinkStatus("saving");
+      try {
+        await api.setEventParishLink(documentId, {
+          event_page: ep,
+          event_x0: ex0,
+          event_y0: ey0,
+          event_x1: ex1,
+          event_y1: ey1,
+          header_page: line.page,
+          header_x0: line.x0,
+          header_y0: line.y0,
+          header_x1: line.x1,
+          header_y1: line.y1,
+        });
+        // The link is only consulted by G (spatial_linker.link_parish)
+        // during extraction — writing it doesn't touch the parish already
+        // stored on existing events, so nothing would visibly change
+        // without re-running extraction now.
+        setLinkStatus("reextracting");
+        await api.extractDocument(documentId, doc?.extraction_method ?? "local");
+        await refetchEvents();
+        setLinkStatus("done");
+        setTimeout(() => setLinkStatus("idle"), 2500);
+      } catch {
+        setLinkStatus("error");
+      }
+    }
+  };
+
+  // Blocklist a line's exact text as never a parish header — global and
+  // text-only (not tied to this one document/page/bbox), so it takes
+  // effect for every layout's future predictions immediately. It does
+  // NOT touch documents already extracted; re-extract to apply it to
+  // events already stored (same caveat as Links mode above).
+  const blocklistHeader = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setBlocklisting(trimmed);
+    try {
+      await api.setLocationMapping(trimmed, { kind: "ignore", corrected_value: null });
+      await refetchIgnoredHeaders();
+      setLines(await api.getDocumentLines(documentId, pageNum));
+    } finally {
+      setBlocklisting(null);
+    }
+  };
+
+  const unblocklistHeader = async (text: string) => {
+    setBlocklisting(text);
+    try {
+      await api.setLocationMapping(text, { kind: null, corrected_value: null });
+      await refetchIgnoredHeaders();
+      setLines(await api.getDocumentLines(documentId, pageNum));
+    } finally {
+      setBlocklisting(null);
     }
   };
 
@@ -320,21 +369,51 @@ export function TrainPage() {
                       : line.label === "not_parish"
                         ? "bg-red-400/20 border-red-500"
                         : "border-transparent";
+                // A confident prediction gets the plain ring as before; a
+                // predicted header the model isn't sure about (M1's
+                // features are purely structural — bold/white/size/
+                // position/gazetteer, no actual text semantics — so
+                // recurring boilerplate that happens to share those
+                // structural traits with a real header, e.g. "Agenda",
+                // often lands here) gets a thicker, differently-colored
+                // ring instead, flagging it for a second look rather than
+                // trusting it the same way.
                 const ring =
                   mode === "date_time"
                     ? line.predicted_role
                       ? "ring-2 ring-amber-400"
                       : ""
                     : line.predicted_header
-                      ? "ring-2 ring-amber-400"
+                      ? (line.header_confidence ?? 1) >= 0.8
+                        ? "ring-2 ring-amber-400"
+                        : "ring-4 ring-orange-500 ring-offset-1"
                       : "";
+                const isBlocklisted = mode === "parish" && (ignoredHeaders ?? []).includes(line.text.trim());
+                const title =
+                  mode === "parish"
+                    ? isBlocklisted
+                      ? `${line.text} — blocklisted (right-click to remove)`
+                      : `${line.text}${
+                          line.header_confidence != null
+                            ? ` (header confidence: ${Math.round(line.header_confidence * 100)}%)`
+                            : ""
+                        } — right-click to blocklist`
+                    : line.text;
                 return (
                   <button
                     key={key + i}
                     type="button"
                     onClick={() => handleLineClick(line)}
-                    title={line.text}
-                    className={`absolute border ${bg} ${ring} cursor-pointer hover:border-sky-400`}
+                    onContextMenu={(e) => {
+                      if (mode !== "parish") return;
+                      e.preventDefault();
+                      if (isBlocklisted) unblocklistHeader(line.text.trim());
+                      else blocklistHeader(line.text);
+                    }}
+                    title={title}
+                    className={`absolute border ${bg} ${ring} cursor-pointer hover:border-sky-400 ${
+                      isBlocklisted ? "bg-slate-500/40 opacity-60" : ""
+                    }`}
                     style={{
                       left: line.x0 * scale,
                       top: line.y0 * scale,
@@ -394,8 +473,52 @@ export function TrainPage() {
                 </p>
               )}
               <div className="text-xs text-slate-500 dark:text-slate-400">
-                Click a line to cycle: unlabeled → parish (green) → not parish (red) → unlabeled. An amber
-                ring means the model currently predicts that line is a header.
+                Click a line to cycle: unlabeled → parish (green) → not parish (red) → unlabeled — a
+                training example for this one occurrence. A thin amber ring means the model confidently
+                predicts that line is a header (≥80%); a thick orange ring means it predicted "header" but
+                isn't confident. Hover a line to see its exact confidence.
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                <strong>Right-click</strong> a line to blocklist its exact text as never a parish header,
+                anywhere — this is a hard override (unlike the click-to-label training examples above, it
+                doesn't rely on the model learning it) and applies immediately to every future prediction,
+                across every document and layout. Blocklisted lines show greyed out on the page.
+              </div>
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-2.5 text-xs text-amber-700 dark:border-slate-800 dark:bg-slate-900/60 dark:text-amber-400">
+                Blocklisting doesn't change any document already extracted — it only stops that text from
+                being predicted as a header <em>going forward</em>. Documents affected need to be
+                re-extracted (Documents page, or the "Extract" action) for their already-stored events to
+                pick up the change, and the public site needs re-exporting/redeploying after that.
+              </div>
+
+              <div className="flex flex-col gap-1 border-t border-slate-200 pt-3 dark:border-slate-800">
+                <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  Blocklisted (never a parish header) — {(ignoredHeaders ?? []).length}
+                </p>
+                {(ignoredHeaders ?? []).length === 0 && (
+                  <p className="text-xs text-slate-400">
+                    None yet. Right-click a line on the page to add one.
+                  </p>
+                )}
+                {(ignoredHeaders ?? []).map((text) => (
+                  <div
+                    key={text}
+                    className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-2 py-1 text-xs dark:border-slate-800"
+                  >
+                    <span className="truncate" title={text}>
+                      {text}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={blocklisting === text}
+                      onClick={() => unblocklistHeader(text)}
+                      aria-label={`Remove "${text}" from the blocklist`}
+                      className="shrink-0 rounded px-1.5 py-0.5 text-slate-400 hover:bg-red-100 hover:text-red-700 disabled:opacity-40 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
               </div>
             </>
           )}
@@ -549,14 +672,31 @@ export function TrainPage() {
                 <p>
                   <strong>How:</strong> click an event in the list below to select it, then click the
                   correct parish banner on the page to the left — an amber ring marks lines the model
-                  already recognizes as banners, but any line can be clicked. The pairing is saved
-                  immediately.
+                  already recognizes as banners, but any line can be clicked. The pairing is saved, then
+                  the document is <strong>re-extracted automatically</strong> so the event's parish below
+                  updates to match — that re-extraction takes a few seconds, watch the status line below.
                 </p>
                 <p>
-                  This only fixes that one event — it does not retrain any model or change how other events
-                  on this or any other page are linked.
+                  This only fixes that one event's parish — it does not retrain any model or change how
+                  other events on this or any other page are linked.
                 </p>
               </div>
+              {linkStatus !== "idle" && (
+                <p
+                  className={`text-xs font-medium ${
+                    linkStatus === "error"
+                      ? "text-red-600 dark:text-red-400"
+                      : linkStatus === "done"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-sky-600 dark:text-sky-400"
+                  }`}
+                >
+                  {linkStatus === "saving" && "Saving link…"}
+                  {linkStatus === "reextracting" && "Re-extracting to apply the link…"}
+                  {linkStatus === "done" && "✓ Applied — parish updated below."}
+                  {linkStatus === "error" && "Something went wrong saving the link — try again."}
+                </p>
+              )}
               <div className="flex flex-col gap-1">
                 {pageEvents.map((e) => {
                   const key = eventKey(e);
@@ -564,8 +704,9 @@ export function TrainPage() {
                     <button
                       key={e.id}
                       type="button"
+                      disabled={linkStatus === "saving" || linkStatus === "reextracting"}
                       onClick={() => setSelectedEventKey(key)}
-                      className={`rounded-md border px-2 py-1.5 text-left text-xs ${
+                      className={`rounded-md border px-2 py-1.5 text-left text-xs disabled:opacity-50 ${
                         selectedEventKey === key
                           ? "border-sky-500 bg-sky-50 dark:border-sky-400 dark:bg-sky-950/40"
                           : "border-slate-200 dark:border-slate-800"

@@ -46,7 +46,7 @@ export function EventDetail({ event, showFeedback, onOpenParish }: Props) {
         <header className="clip-head">
           <p className="clip-k">Kirchenblatt</p>
           <div className="clip-row">
-            <p className="nm">{event.document_region ?? "Ausgabe"}</p>
+            <p className="nm">{event.document_ausgabe || "Ausgabe"}</p>
             <p className="pg">Seite {event.page + 1}</p>
           </div>
         </header>

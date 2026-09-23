@@ -113,7 +113,7 @@ export const staticApi: Api = {
       events.filter((e) => matches(e, filters, new Set(["document_id"]))).map((e) => e.document_id)
     ).map((id) => {
       const e = events.find((ev) => ev.document_id === id)!;
-      return { id, region: e.document_region };
+      return { id, region: e.document_ausgabe };
     });
 
     const meta: Meta = {
@@ -191,6 +191,7 @@ export const staticApi: Api = {
   testLocalLlm: () => notAvailable("Testing the local LLM"),
   listLocationMappings: () => notAvailable("Listing location mappings"),
   setLocationMapping: () => notAvailable("Editing location mappings"),
+  listIgnoredHeaders: () => notAvailable("Listing ignored headers"),
   getDocumentLines: () => notAvailable("Reading document lines"),
   setParishLineLabel: () => notAvailable("Labeling parish lines"),
   setEventParishLink: () => notAvailable("Linking events"),

@@ -179,9 +179,9 @@ export function PublicMapPage() {
                 className={`select-chip${filters.parish ? " active" : ""}`}
                 value={filters.parish ?? ""}
                 onChange={(e) => setFilters((f) => ({ ...f, parish: e.target.value || undefined }))}
-                aria-label="Gemeinde"
+                aria-label="Standort"
               >
-                <option value="">Alle Gemeinden</option>
+                <option value="">Alle Standorte</option>
                 {meta?.parishes.map((p) => (
                   <option key={p} value={p}>
                     {p}

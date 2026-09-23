@@ -14,6 +14,35 @@ interface Props {
 
 const NEW_LAYOUT_SENTINEL = "__new_layout__";
 
+const SWISS_CANTONS = [
+  "Aargau",
+  "Appenzell Ausserrhoden",
+  "Appenzell Innerrhoden",
+  "Basel-Landschaft",
+  "Basel-Stadt",
+  "Bern",
+  "Freiburg",
+  "Genf",
+  "Glarus",
+  "Graubünden",
+  "Jura",
+  "Luzern",
+  "Neuenburg",
+  "Nidwalden",
+  "Obwalden",
+  "Schaffhausen",
+  "Schwyz",
+  "Solothurn",
+  "St. Gallen",
+  "Tessin",
+  "Thurgau",
+  "Uri",
+  "Wallis",
+  "Waadt",
+  "Zug",
+  "Zürich",
+];
+
 const STATUS_STYLES: Record<Document["status"], string> = {
   uploaded: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
   processing: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
@@ -30,6 +59,7 @@ export function DocumentRow({
   onLayoutsChanged,
 }: Props) {
   const [region, setRegion] = useState(doc.region);
+  const [canton, setCanton] = useState(doc.canton);
   const [layout, setLayout] = useState<string | null>(doc.layout);
   const [firstPage, setFirstPage] = useState(doc.first_page);
   const [lastPage, setLastPage] = useState(doc.last_page);
@@ -40,6 +70,7 @@ export function DocumentRow({
 
   const dirty =
     region !== doc.region ||
+    canton !== doc.canton ||
     layout !== doc.layout ||
     firstPage !== doc.first_page ||
     lastPage !== doc.last_page ||
@@ -49,7 +80,14 @@ export function DocumentRow({
     setSaving(true);
     setError(null);
     try {
-      await api.patchDocument(doc.id, { region, layout, first_page: firstPage, last_page: lastPage, year });
+      await api.patchDocument(doc.id, {
+        region,
+        canton,
+        layout,
+        first_page: firstPage,
+        last_page: lastPage,
+        year,
+      });
       onChanged();
     } catch (err) {
       setError(err instanceof api.ApiError ? err.detail : "Save failed");
@@ -128,11 +166,27 @@ export function DocumentRow({
       )}
 
       <div className="mt-3 flex flex-wrap items-end gap-3">
-        <Field label="Region label">
+        <Field label="Canton">
+          <select
+            value={canton}
+            onChange={(e) => setCanton(e.target.value)}
+            className={`w-40 rounded-md border bg-white px-2 py-1 text-sm dark:bg-slate-800 ${
+              canton ? "border-slate-300 dark:border-slate-700" : "border-amber-400 dark:border-amber-600"
+            }`}
+          >
+            <option value="">Select canton…</option>
+            {SWISS_CANTONS.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Ausgabe">
           <input
             value={region}
             onChange={(e) => setRegion(e.target.value)}
-            placeholder="e.g. Kanton Solothurn"
+            placeholder="e.g. Solothurn Region"
             className="w-48 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-800"
           />
         </Field>
@@ -213,14 +267,16 @@ export function DocumentRow({
           </Field>
           <button
             type="button"
-            disabled={!doc.region || !doc.layout || doc.status === "processing"}
+            disabled={!doc.region || !doc.canton || !doc.layout || doc.status === "processing"}
             onClick={extract}
             title={
               !doc.region
-                ? "Set a region label before extracting"
-                : !doc.layout
-                  ? "Set a layout before extracting"
-                  : ""
+                ? "Set an Ausgabe label before extracting"
+                : !doc.canton
+                  ? "Set a canton before extracting"
+                  : !doc.layout
+                    ? "Set a layout before extracting"
+                    : ""
             }
             className="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
           >

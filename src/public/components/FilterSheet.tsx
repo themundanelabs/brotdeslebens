@@ -38,7 +38,7 @@ export function FilterSheet({ open, meta, filters, onChange, onClear, onClose }:
           </button>
         </div>
         <div className="sheet-body">
-          <p className="flabel first">Gemeinde / Pfarrei</p>
+          <p className="flabel first">Standort / Pfarrei</p>
           <div className="wrap-filters">
             <Chip label="Alle" on={!filters.parish} onClick={() => onChange({ parish: undefined })} />
             {meta?.parishes.map((p) => (

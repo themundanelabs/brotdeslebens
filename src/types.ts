@@ -5,6 +5,7 @@ export interface Document {
   id: number;
   original_filename: string;
   region: string;
+  canton: string;
   layout: string | null;
   status: DocumentStatus;
   error_message: string | null;
@@ -29,6 +30,7 @@ export interface Event {
   id: number;
   document_id: number;
   document_region: string;
+  document_ausgabe: string;
   region: string | null;
   parish: string | null;
   place: string | null;
@@ -56,7 +58,7 @@ export interface Meta {
   parishes: string[];
   dates: string[];
   categories: string[];
-  /** Public site only — distinct Document.region values ("Canton"
+  /** Public site only — distinct Document.canton values ("Canton"
    * filter). Optional since the live backend's /api/meta doesn't return
    * it; the admin UI never reads this field. */
   cantons?: string[];
@@ -126,6 +128,9 @@ export interface LineOut {
   bold: boolean;
   white: boolean;
   predicted_header: boolean;
+  /** M1's raw confidence (0-1) that this line is a parish header — null
+   * for lines that never reached the model (not bold, or hard-filtered). */
+  header_confidence: number | null;
   label: "parish" | "not_parish" | null;
   predicted_role: "date_heading" | "time_event" | null;
   role_label: "date_heading" | "time_event" | "other" | null;

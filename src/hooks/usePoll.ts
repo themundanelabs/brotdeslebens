@@ -6,7 +6,10 @@ interface PollState<T> {
   data: T | undefined;
   error: unknown;
   loading: boolean;
-  refetch: () => void;
+  /** Resolves once this fetch's result has actually landed in `data` —
+   * callers that need to know the refreshed data is visible (not just
+   * requested) can `await` it, e.g. before showing a "done" status. */
+  refetch: () => Promise<void>;
 }
 
 /**
@@ -20,33 +23,36 @@ export function usePoll<T>(fetcher: () => Promise<T>, deps: unknown[]): PollStat
   const [loading, setLoading] = useState(true);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
+  // A ref (not the closure returned from a single load() call) so the
+  // *current* in-flight fetch is always the one checked, regardless of
+  // which call started it — matters now that load() is awaited directly
+  // by callers rather than only invoked from the effect/interval below.
+  const cancelledRef = useRef(false);
 
-  const load = useCallback(() => {
-    let cancelled = false;
-    fetcherRef.current()
+  const load = useCallback((): Promise<void> => {
+    return fetcherRef
+      .current()
       .then((result) => {
-        if (!cancelled) {
+        if (!cancelledRef.current) {
           setData(result);
           setError(null);
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(err);
+        if (!cancelledRef.current) setError(err);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelledRef.current) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   useEffect(() => {
+    cancelledRef.current = false;
     setLoading(true);
-    const cancel = load();
+    load();
     const id = setInterval(load, POLL_INTERVAL_MS);
     return () => {
-      cancel();
+      cancelledRef.current = true;
       clearInterval(id);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -95,7 +95,7 @@ const liveApi = {
   },
   patchDocument: (
     id: number,
-    patch: Partial<Pick<Document, "region" | "layout" | "first_page" | "last_page" | "year">>
+    patch: Partial<Pick<Document, "region" | "canton" | "layout" | "first_page" | "last_page" | "year">>
   ) =>
     request<Document>(`/api/documents/${id}`, {
       method: "PATCH",
@@ -127,6 +127,11 @@ const liveApi = {
       method: "PUT",
       body: JSON.stringify(patch),
     }),
+  // Backs the Trainer UI's Parish-mode blocklist — same location_mappings
+  // table/kind='ignore' as setLocationMapping, but listed without the
+  // "already extracted somewhere" (count > 0) filter listLocationMappings
+  // applies, so a freshly-blocklisted entry shows immediately.
+  listIgnoredHeaders: () => request<string[]>("/api/location-mappings/ignored-headers"),
 
   getDocumentLines: (documentId: number, page: number) =>
     request<LineOut[]>(`/api/documents/${documentId}/lines?page=${page}`),
